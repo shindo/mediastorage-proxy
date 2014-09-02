@@ -20,6 +20,8 @@
 #include "proxy.hpp"
 #include "data_container.hpp"
 
+#include "handystats.hpp"
+
 #include <swarm/url.hpp>
 
 #include <functional>
@@ -27,6 +29,8 @@
 namespace elliptics {
 
 void proxy::req_get::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
+	HANDY_TIMER_START("mds.get.time", reinterpret_cast<uint64_t>(this));
+	HANDY_MDS_GET();
 	m_beg_time = std::chrono::system_clock::now();
 	url_str = req.url().path();
 	BH_LOG(logger(), SWARM_LOG_INFO, "Get: handle request: %s", url_str.c_str());
@@ -43,6 +47,7 @@ void proxy::req_get::on_request(const ioremap::thevoid::http_request &req, const
 		BH_LOG(logger(), SWARM_LOG_INFO,
 			"Get: request = \"%s\"; err: \"%s\"",
 			req.url().path().c_str(), ex.what());
+		HANDY_MDS_GET_REPLY(400);
 		send_reply(400);
 		return;
 	}
@@ -59,6 +64,7 @@ void proxy::req_get::on_request(const ioremap::thevoid::http_request &req, const
 		headers.add("WWW-Authenticate", std::string("Basic realm=\"") + ns->name + "\"");
 		headers.add("Content-Length", "0");
 		reply.set_headers(headers);
+		HANDY_MDS_GET_REPLY(reply.code());
 		send_reply(std::move(reply));
 		return;
 	}
@@ -67,6 +73,7 @@ void proxy::req_get::on_request(const ioremap::thevoid::http_request &req, const
 		BH_LOG(logger(), SWARM_LOG_INFO
 				, "Get %s: on_request: cannot find couple of groups for the request"
 				, url_str.c_str());
+		HANDY_MDS_GET_REPLY(404);
 		send_reply(404);
 		return;
 	}
@@ -109,11 +116,13 @@ void proxy::req_get::on_lookup(const ioremap::elliptics::sync_lookup_result &slr
 			BH_LOG(logger(), SWARM_LOG_INFO
 					, "Get %s %s: on_lookup: file not found"
 					, m_key.remote().c_str(), m_key.to_string().c_str());
+			HANDY_MDS_GET_REPLY(404);
 			send_reply(404);
 		} else {
 			BH_LOG(logger(), SWARM_LOG_ERROR
 					, "Get %s %s: on_lookup: %s"
 					, m_key.remote().c_str(), m_key.to_string().c_str(), error.message().c_str());
+			HANDY_MDS_GET_REPLY(500);
 			send_reply(500);
 		}
 		return;
@@ -126,6 +135,7 @@ void proxy::req_get::on_lookup(const ioremap::elliptics::sync_lookup_result &slr
 				, "Get %s %s: offset greater than total_size"
 				, m_key.remote().c_str()
 				, m_key.to_string().c_str());
+		HANDY_MDS_GET_REPLY(400);
 		send_reply(400);
 		return;
 	}
@@ -183,6 +193,7 @@ void proxy::req_get::on_read_chunk(const ioremap::elliptics::sync_read_result &s
 		BH_LOG(logger(), SWARM_LOG_ERROR
 				, "Get %s %s: on_read_chunk: %s"
 				, m_key.remote().c_str(), m_key.to_string().c_str(), error.message().c_str());
+		HANDY_MDS_GET_REPLY(500);
 		send_reply(500);
 		return;
 	}
@@ -215,9 +226,10 @@ void proxy::req_get::on_read_chunk(const ioremap::elliptics::sync_read_result &s
 			char ts_str[128] = {0};
 			struct tm tmp;
 			strftime(ts_str, sizeof (ts_str), "%a, %d %b %Y %T %Z", gmtime_r(&timestamp, &tmp));
-			
+
 			if (m_if_modified_since) {
 				if (*m_if_modified_since == ts_str) {
+					HANDY_MDS_GET_REPLY(304);
 					send_reply(304);
 					return;
 				}
@@ -226,6 +238,7 @@ void proxy::req_get::on_read_chunk(const ioremap::elliptics::sync_read_result &s
 			reply.headers().set_last_modified(ts_str);
 		}
 
+		HANDY_MDS_GET_REPLY(reply.code());
 		send_headers(std::move(reply), std::function<void (const boost::system::error_code &)>());
 	}
 
@@ -266,6 +279,8 @@ void proxy::req_get::on_sent_chunk(const boost::system::error_code &error) {
 	}
 
 	reply()->close(error);
+
+	HANDY_TIMER_STOP("mds.get.time", reinterpret_cast<uint64_t>(this));
 }
 
 }

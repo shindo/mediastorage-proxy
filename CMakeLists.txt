@@ -20,6 +20,7 @@ set(REQUIRED_LIBRARIES
 	magic
 	${GLIB_LIBRARY}
 	crypto++
+	handystats
 	)
 
 set(SOURCE

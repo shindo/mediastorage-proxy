@@ -19,8 +19,12 @@
 
 #include "proxy.hpp"
 
+#include "handystats.hpp"
+
 namespace elliptics {
 void proxy::req_delete::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
+	HANDY_TIMER_START("mds.delete.time", reinterpret_cast<uint64_t>(this));
+	HANDY_MDS_DELETE();
 	try {
 		BH_LOG(logger(), SWARM_LOG_INFO, "Delete: handle request: %s", req.url().path().c_str());
 		namespace_ptr_t ns;
@@ -36,6 +40,7 @@ void proxy::req_delete::on_request(const ioremap::thevoid::http_request &req, co
 				"Delete: request = \"%s\", err = \"%s\"",
 				url_str.c_str(), ex.what()
 				);
+			HANDY_MDS_DELETE_REPLY(400);
 			send_reply(400);
 			return;
 		}
@@ -52,6 +57,7 @@ void proxy::req_delete::on_request(const ioremap::thevoid::http_request &req, co
 			headers.add("WWW-Authenticate", std::string("Basic realm=\"") + ns->name + "\"");
 			headers.add("Content-Length", "0");
 			reply.set_headers(headers);
+			HANDY_MDS_DELETE_REPLY(reply.code());
 			send_reply(std::move(reply));
 			return;
 		}
@@ -68,10 +74,12 @@ void proxy::req_delete::on_request(const ioremap::thevoid::http_request &req, co
 	} catch (const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Delete request=\"%s\" error: %s"
 				, url_str.c_str(), ex.what());
+		HANDY_MDS_DELETE_REPLY(500);
 		send_reply(500);
 	} catch (...) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Delete request=\"%s\" error: unknown"
 				, url_str.c_str());
+		HANDY_MDS_DELETE_REPLY(500);
 		send_reply(500);
 	}
 }
@@ -81,6 +89,7 @@ void proxy::req_delete::on_lookup(const ioremap::elliptics::sync_lookup_result &
 	if (error) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Delete request=\"%s\" lookup error: %s"
 				, url_str.c_str(), error.message().c_str());
+		HANDY_MDS_DELETE_REPLY(error.code() == -ENOENT ? 404 : 500);
 		send_reply(error.code() == -ENOENT ? 404 : 500);
 		return;
 	}
@@ -132,6 +141,7 @@ void proxy::req_delete::on_finished(const ioremap::elliptics::sync_remove_result
 	if (has_bad_response) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Delete request=\"%s\" remove is failed"
 				, url_str.c_str());
+		HANDY_MDS_DELETE_REPLY(500);
 		send_reply(500);
 		return;
 	}
@@ -139,13 +149,17 @@ void proxy::req_delete::on_finished(const ioremap::elliptics::sync_remove_result
 	if (enoent_count == srr.size()) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Delete request=\"%s\" key not found"
 				, url_str.c_str());
+		HANDY_MDS_DELETE_REPLY(404);
 		send_reply(404);
 		return;
 	}
 
 	BH_LOG(logger(), SWARM_LOG_INFO, "Delete request=\"%s\" remove is done"
 			, url_str.c_str());
+	HANDY_MDS_DELETE_REPLY(200);
 	send_reply(200);
+
+	HANDY_TIMER_STOP("mds.delete.time", reinterpret_cast<uint64_t>(this));
 	return;
 }
 } // namespace elliptics

@@ -24,6 +24,8 @@
 #include "loggers.hpp"
 #include "magic_provider.hpp"
 
+#include "handystats.hpp"
+
 #include <elliptics/session.hpp>
 #include <libmastermind/mastermind.hpp>
 #include <thevoid/server.hpp>
@@ -202,6 +204,13 @@ public:
 	struct req_statistics
 		: public ioremap::thevoid::simple_request_stream<proxy>
 		, public std::enable_shared_from_this<req_statistics>
+	{
+		void on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer);
+	};
+
+	struct req_stats
+		: public ioremap::thevoid::simple_request_stream<proxy>
+		, public std::enable_shared_from_this<req_stats>
 	{
 		void on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer);
 	};

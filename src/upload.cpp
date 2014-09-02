@@ -21,6 +21,8 @@
 #include "data_container.hpp"
 #include "lookup_result.hpp"
 
+#include "handystats.hpp"
+
 #include <swarm/url.hpp>
 
 #include <sstream>
@@ -28,6 +30,8 @@
 namespace elliptics {
 
 void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
+	HANDY_TIMER_START("mds.upload.time", reinterpret_cast<uint64_t>(this));
+	HANDY_MDS_UPLOAD();
 	m_beg_time = std::chrono::system_clock::now();
 	const auto &str_url = req.url().path();
 
@@ -37,6 +41,8 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 		BH_LOG(logger(), SWARM_LOG_INFO
 				, "Upload %s: missing Content-Length"
 				, str_url.c_str());
+
+		HANDY_MDS_UPLOAD_REPLY(400);
 		send_reply(400);
 		return;
 	}
@@ -45,6 +51,8 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 		BH_LOG(logger(), SWARM_LOG_INFO
 				, "Upload %s: Content-Length must be greater than zero"
 				, str_url.c_str());
+
+		HANDY_MDS_UPLOAD_REPLY(400);
 		send_reply(400);
 		return;
 	}
@@ -79,6 +87,7 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 			headers.add("WWW-Authenticate", std::string("Basic realm=\"") + file_info.second->name + "\"");
 			headers.add("Content-Length", "0");
 			reply.set_headers(headers);
+			HANDY_MDS_UPLOAD_REPLY(reply.code());
 			send_reply(std::move(reply));
 			return;
 		}
@@ -93,6 +102,7 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 		BH_LOG(logger(), SWARM_LOG_ERROR
 				, "Upload %s: too low number of existing states"
 				, str_url.c_str());
+		HANDY_MDS_UPLOAD_REPLY(503);
 		send_reply(503);
 		return;
 	}
@@ -101,6 +111,7 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 		BH_LOG(logger(), SWARM_LOG_INFO
 				, "Upload %s: cannot determine a namespace"
 				, str_url.c_str());
+		HANDY_MDS_UPLOAD_REPLY(400);
 		send_reply(400);
 		return;
 	}
@@ -121,6 +132,7 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 			, static_cast<int>(file_info.second->groups_count)
 			, file_info.second->name.c_str()
 			, e.code().message().c_str());
+		HANDY_MDS_UPLOAD_REPLY(507);
 		send_reply(507);
 		return;
 	} catch (const std::system_error &e) {
@@ -130,6 +142,7 @@ void proxy::req_upload::on_request(const ioremap::thevoid::http_request &req) {
 			, static_cast<int>(file_info.second->groups_count)
 			, file_info.second->name.c_str()
 			, e.code().message().c_str());
+		HANDY_MDS_UPLOAD_REPLY(500);
 		send_reply(500);
 		return;
 	}
@@ -214,6 +227,7 @@ void proxy::req_upload::on_error(const boost::system::error_code &err) {
 			, m_key.remote().c_str()
 			, m_key.to_string().c_str()
 			, err.message().c_str());
+	HANDY_MDS_UPLOAD_REPLY(500);
 	send_reply(500);
 }
 
@@ -288,13 +302,14 @@ void proxy::req_upload::on_finished(const ioremap::elliptics::sync_write_result 
 
 		BH_LOG(logger(), SWARM_LOG_ERROR, "%s", oss.str().c_str());
 
+		HANDY_MDS_UPLOAD_REPLY(500);
 		send_reply(500);
 		return;
 	}
 
 	std::ostringstream oss;
 
-	oss 
+	oss
 		<< "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
 		<< "<post obj=\"" << m_key.remote() << "\" id=\""
 		<< id_str(m_key, *m_session)
@@ -323,13 +338,13 @@ void proxy::req_upload::on_finished(const ioremap::elliptics::sync_write_result 
 		}
 
 		oss << "\" path=\"";
-	
+
 		if (pl.status() == 0) {
 			oss << pl.full_path();
 		}
 
 		oss << "\" group=\"";
-		
+
 		if (pl.status() == 0) {
 			oss << pl.group();
 			wrote_into_groups.push_back(pl.group());
@@ -354,6 +369,7 @@ void proxy::req_upload::on_finished(const ioremap::elliptics::sync_write_result 
 	headers.set_content_type("text/plain");
 	reply.set_headers(headers);
 
+	HANDY_MDS_UPLOAD_REPLY(reply.code());
 	send_reply(std::move(reply), std::move(res_str));
 
 	auto end_time = std::chrono::system_clock::now();
@@ -378,6 +394,8 @@ void proxy::req_upload::on_finished(const ioremap::elliptics::sync_write_result 
 		oss << ']';
 		BH_LOG(logger(), SWARM_LOG_INFO, "%s", oss.str().c_str());
 	}
+
+	HANDY_TIMER_STOP("mds.upload.time", reinterpret_cast<uint64_t>(this));
 }
 
 ioremap::elliptics::async_write_result proxy::req_upload::write(unsigned int flags) {

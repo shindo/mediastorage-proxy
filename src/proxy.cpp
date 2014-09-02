@@ -218,7 +218,7 @@ std::shared_ptr<mastermind::mastermind_t> proxy::generate_mastermind(const rapid
 	if (config.HasMember("mastermind") == false) {
 		throw std::runtime_error("You should set settings for mastermind");
 	}
-	
+
 	const auto &mastermind = config["mastermind"];
 
 	if (mastermind.HasMember("nodes") == false) {
@@ -256,6 +256,7 @@ std::shared_ptr<mastermind::mastermind_t> proxy::generate_mastermind(const rapid
 }
 
 proxy::~proxy() {
+	HANDY_FINALIZE();
 	m_mastermind.reset();
 }
 
@@ -348,10 +349,28 @@ bool proxy::initialize(const rapidjson::Value &config) {
 			m_read_chunk_size = chunk_size["read"].GetInt() * MB;
 		}
 
+		if (config.HasMember("handystats")) {
+			HANDY_CONFIG_JSON(config["handystats"]);
+		}
+		else {
+			HANDY_CONFIG_JSON("{\
+					\"metrics-dump\": {\
+						\"interval\": 750,\
+						\"to-json\": true\
+					},\
+					\"timer\": {\
+						\"idle-timeout\": 30000\
+					}\
+				}");
+		}
+
 	} catch(const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "%s", ex.what());
 		return false;
 	}
+
+	HANDY_INIT();
+
 	BH_LOG(logger(), SWARM_LOG_INFO, "Mediastorage-proxy starts: initialize handlers");
 
 	register_handler<req_upload>("upload", false);
@@ -362,10 +381,10 @@ bool proxy::initialize(const rapidjson::Value &config) {
 	register_handler<req_stat_log>("stat-log", true);
 	register_handler<req_stat_log>("stat_log", true);
 	register_handler<req_ping>("ping", true);
-	register_handler<req_ping>("stat", true);
 	register_handler<req_cache>("cache", true);
 	register_handler<req_cache_update>("cache-update", true);
 	register_handler<req_statistics>("statistics", false);
+	register_handler<req_stats>("stats", false);
 
 	BH_LOG(logger(), SWARM_LOG_INFO, "Mediastorage-proxy starts: done");
 	BH_LOG(logger(), SWARM_LOG_INFO, "Mediastorage-proxy starts: initialization is done");
@@ -379,6 +398,7 @@ proxy::req_download_info::req_download_info(const std::string &handler_name_)
 
 void proxy::req_download_info::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 	try {
+		HANDY_MDS_DOWNLOAD_INFO();
 		BH_LOG(logger(), SWARM_LOG_INFO, "Download info: handle request: %s", req.url().path().c_str());
 		const auto &url = req.url().path();
 		try {
@@ -387,6 +407,7 @@ void proxy::req_download_info::on_request(const ioremap::thevoid::http_request &
 			BH_LOG(logger(), SWARM_LOG_INFO,
 				"Download info: request = \"%s\"; err: \"%s\"",
 				url.c_str(), ex.what());
+			HANDY_MDS_DOWNLOAD_INFO_REPLY(400);
 			send_reply(400);
 			return;
 		}
@@ -399,6 +420,7 @@ void proxy::req_download_info::on_request(const ioremap::thevoid::http_request &
 			key.reset(prep_session.second);
 		} catch (const std::exception &ex) {
 			BH_LOG(logger(), SWARM_LOG_INFO, "Download info request error: %s", ex.what());
+			HANDY_MDS_DOWNLOAD_INFO_REPLY(400);
 			send_reply(400);
 			return;
 		}
@@ -411,6 +433,7 @@ void proxy::req_download_info::on_request(const ioremap::thevoid::http_request &
 		}
 
 		if (session->get_groups().empty()) {
+			HANDY_MDS_DOWNLOAD_INFO_REPLY(404);
 			send_reply(404);
 			return;
 		}
@@ -424,9 +447,11 @@ void proxy::req_download_info::on_request(const ioremap::thevoid::http_request &
 		alr.connect(wrap(std::bind(&req_download_info::on_finished, shared_from_this(), std::placeholders::_1, std::placeholders::_2)));
 	} catch (const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Download info request error: %s", ex.what());
+		HANDY_MDS_DOWNLOAD_INFO_REPLY(500);
 		send_reply(500);
 	} catch (...) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Download info request error: unknown");
+		HANDY_MDS_DOWNLOAD_INFO_REPLY(500);
 		send_reply(500);
 	}
 }
@@ -436,6 +461,7 @@ void proxy::req_download_info::on_finished(const ioremap::elliptics::sync_lookup
 		BH_LOG(logger(), SWARM_LOG_DEBUG, "Download info: prepare response");
 		if (error) {
 			BH_LOG(logger(), SWARM_LOG_ERROR, "%s", error.message().c_str());
+			HANDY_MDS_DOWNLOAD_INFO_REPLY(error.code() == -ENOENT ? 404 : 500);
 			send_reply(error.code() == -ENOENT ? 404 : 500);
 			return;
 		}
@@ -445,9 +471,9 @@ void proxy::req_download_info::on_finished(const ioremap::elliptics::sync_lookup
 				std::stringstream oss;
 				oss << "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
 				std::string region = "-1";
-				
+
 				auto entry = server()->parse_lookup(*it, ns);
-				
+
 				std::string sign;
 				long time;
 				bool use_sign = !ns->sign_token.empty();
@@ -508,23 +534,28 @@ void proxy::req_download_info::on_finished(const ioremap::elliptics::sync_lookup
 				headers.set_content_length(str.size());
 				headers.set_content_type("text/xml");
 				reply.set_headers(headers);
+				HANDY_MDS_DOWNLOAD_INFO_REPLY(reply.code());
 				send_reply(std::move(reply), std::move(str));
 				return;
 			}
 		}
 		BH_LOG(logger(), SWARM_LOG_DEBUG, "Download info: sending response");
-		send_reply(503);  
+		HANDY_MDS_DOWNLOAD_INFO_REPLY(503);
+		send_reply(503);
 	} catch (const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Download info finish error: %s", ex.what());
+		HANDY_MDS_DOWNLOAD_INFO_REPLY(500);
 		send_reply(500);
 	} catch (...) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Download info finish error: unknown");
+		HANDY_MDS_DOWNLOAD_INFO_REPLY(500);
 		send_reply(500);
 	}
 }
 
 void proxy::req_ping::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 	try {
+		HANDY_MDS_PING();
 		auto begin_request = std::chrono::system_clock::now();
 		std::ostringstream ts_oss;
 
@@ -583,6 +614,7 @@ void proxy::req_ping::on_request(const ioremap::thevoid::http_request &req, cons
 		ts_oss << "die_limit is checked: " << std::chrono::duration_cast<std::chrono::microseconds>(
 				std::chrono::system_clock::now() - begin_request).count() << "us; ";
 
+		HANDY_MDS_PING_REPLY(code);
 		send_reply(code);
 
 		ts_oss << "request was send: " << std::chrono::duration_cast<std::chrono::microseconds>(
@@ -599,15 +631,18 @@ void proxy::req_ping::on_request(const ioremap::thevoid::http_request &req, cons
 		}
 	} catch (const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Ping request error: %s", ex.what());
+		HANDY_MDS_PING_REPLY(500);
 		send_reply(500);
 	} catch (...) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Ping request error: unknown");
+		HANDY_MDS_PING_REPLY(500);
 		send_reply(500);
 	}
 }
 
 void proxy::req_cache::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 	try {
+		HANDY_MDS_CACHE();
 		BH_LOG(logger(), SWARM_LOG_INFO, "Cache: handle request: %s", req.url().path().c_str());
 		auto query_list = req.url().query();
 
@@ -654,28 +689,35 @@ void proxy::req_cache::on_request(const ioremap::thevoid::http_request &req, con
 		headers.set_content_type("text/plain");
 		reply.set_headers(headers);
 		BH_LOG(logger(), SWARM_LOG_DEBUG, "Cache: sending response");
+		HANDY_MDS_CACHE_REPLY(reply.code());
 		send_reply(std::move(reply), std::move(res_str));
 	} catch (const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Cache request error: %s", ex.what());
+		HANDY_MDS_CACHE_REPLY(500);
 		send_reply(500);
 	} catch (...) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Cache request error: unknown");
+		HANDY_MDS_CACHE_REPLY(500);
 		send_reply(500);
 	}
 }
 
 void proxy::req_cache_update::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
 	try {
+		HANDY_MDS_CACHE_UPDATE();
 		auto query_list = req.url().query();
 
 		server()->mastermind()->cache_force_update();
 		server()->cache_update_callback();
+		HANDY_MDS_CACHE_UPDATE_REPLY(200);
 		send_reply(200);
 	} catch (const std::exception &ex) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Cache request error: %s", ex.what());
+		HANDY_MDS_CACHE_UPDATE_REPLY(500);
 		send_reply(500);
 	} catch (...) {
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Cache request error: unknown");
+		HANDY_MDS_CACHE_UPDATE_REPLY(500);
 		send_reply(500);
 	}
 }
@@ -701,6 +743,20 @@ void proxy::req_statistics::on_request(const ioremap::thevoid::http_request &req
 		BH_LOG(logger(), SWARM_LOG_ERROR, "Statistics request error: unknown");
 		send_reply(500);
 	}
+}
+
+void proxy::req_stats::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
+	std::string json = *HANDY_JSON_DUMP();
+
+	ioremap::thevoid::http_response reply;
+	ioremap::swarm::http_headers headers;
+
+	reply.set_code(200);
+	headers.set_content_length(json.size());
+	headers.set_content_type("text/json");
+	reply.set_headers(headers);
+
+	send_reply(std::move(reply), std::move(json));
 }
 
 void proxy::req_stat_log::on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer) {
