@@ -1,3 +1,9 @@
+mediastorage-proxy (0.57+handystats.1) unstable; urgency=low
+
+  * debian/control: elliptics-dev updated to 2.26
+
+ -- Danil Osherov <shindo@yandex-team.ru>  Thu, 04 Sep 2014 22:26:56 +0400
+
 mediastorage-proxy (0.57+handystats.0) lucid; urgency=low
 
   * handystats statistics added:
