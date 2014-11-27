@@ -37,6 +37,9 @@ class upload_t
 	, public std::enable_shared_from_this<upload_t>
 {
 public:
+	upload_t();
+	~upload_t();
+
 	void
 	on_headers(ioremap::thevoid::http_request &&http_request);
 

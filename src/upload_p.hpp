@@ -46,6 +46,8 @@ public:
 			, size_t total_size_, size_t offset_, size_t commit_coef_, size_t success_copies_num_
 			);
 
+	~upload_helper_t();
+
 	void
 	write(const char *data, size_t size, callback_t on_wrote, callback_t on_error);
 
@@ -113,6 +115,7 @@ public:
 	typedef std::function<void ()> on_error_callback_t;
 
 	upload_buffer_t(ioremap::swarm::logger bh_logger_, std::string key_, size_t chunk_size_);
+	~upload_buffer_t();
 
 	bool
 	append(const char *data, size_t size);
@@ -155,6 +158,7 @@ struct upload_simple_t
 	, public std::enable_shared_from_this<upload_simple_t>
 {
 	upload_simple_t(namespace_ptr_t ns_, couple_t couple_, std::string filename_);
+	~upload_simple_t();
 
 	void
 	on_request(const ioremap::thevoid::http_request &http_request);
@@ -195,6 +199,7 @@ struct upload_multipart_t
 	, public std::enable_shared_from_this<upload_multipart_t>
 {
 	upload_multipart_t(namespace_ptr_t ns_, couple_t couple_);
+	~upload_multipart_t();
 
 	void
 	on_headers(ioremap::thevoid::http_request &&http_request_);

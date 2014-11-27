@@ -17,6 +17,8 @@
 	Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+#include <handystats/measuring_points.hpp>
+
 #include "upload_p.hpp"
 
 namespace elliptics {
@@ -173,6 +175,11 @@ upload_multipart_t::upload_multipart_t(namespace_ptr_t ns_, couple_t couple_)
 	, upload_tasks_count(1)
 	, is_internal_error(false)
 {
+	HANDY_COUNTER_INCREMENT("mds.handlers.upload_multipart");
+}
+
+upload_mutlipart_t::~upload_mutlipart_t() {
+	HANDY_COUNTER_DECREMENT("mds.handlers.upload_multipart");
 }
 
 void

@@ -27,6 +27,8 @@
 
 #include <swarm/url.hpp>
 
+#include <handystats/measuring_point.hpp>
+
 #include <crypto++/md5.h>
 
 #include <boost/asio/buffer.hpp>
@@ -66,6 +68,12 @@ public:
 			<< " chunk-size=" << chunk_size;
 		auto msg = oss.str();
 		MDS_LOG_INFO("%s", msg.c_str());
+
+		HANDY_COUNTER_INCREMENT("mds.handlers.get_helper");
+	}
+
+	~get_helper_t() {
+		HANDY_COUNTER_DECREMENT("mds.handlers.get_helper");
 	}
 
 	void
@@ -206,6 +214,14 @@ private:
 	dnet_time data_timestamp;
 	chunk_type_tag chunk_type;
 };
+
+req_get::req_get() {
+	HANDY_COUNTER_INCREMENT("mds.handlers.get");
+}
+
+req_get::~req_get() {
+	HANDY_COUNTER_DECREMENT("mds.handlers.get");
+}
 
 void req_get::on_request(const ioremap::thevoid::http_request &http_request
 		, const boost::asio::const_buffer &buffer) {

@@ -30,6 +30,11 @@ upload_simple_t::upload_simple_t(namespace_ptr_t ns_, couple_t couple_, std::str
 	, request_is_failed(false)
 	, reply_was_sent(false)
 {
+	HANDY_COUNTER_INCREMENT("mds.handlers.upload_simple");
+}
+
+upload_simple_t::~upload_simple_t() {
+	HANDY_COUNTER_DECREMENT("mds.handlers.upload_simple");
 }
 
 void
@@ -54,7 +59,7 @@ upload_simple_t::on_chunk(const boost::asio::const_buffer &buffer, unsigned int 
 	const char *buffer_data = boost::asio::buffer_cast<const char *>(buffer);
 	const size_t buffer_size = boost::asio::buffer_size(buffer);
 
-	// Fix flags to single_chunk if first chunk == data size 
+	// Fix flags to single_chunk if first chunk == data size
 	if ((flags & last_chunk) && m_single_chunk && (buffer_size == 0)) {
 		MDS_LOG_INFO("on_chunk: skipping empty commit");
 		return;
@@ -93,7 +98,7 @@ upload_simple_t::on_finished() {
 	}
 
 	std::ostringstream oss;
-	oss 
+	oss
 		<< "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
 		<< "<post obj=\"" << upload_helper->key.remote()
 		<< "\" id=\"" << upload_helper->key.to_string()

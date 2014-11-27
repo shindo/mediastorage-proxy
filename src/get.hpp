@@ -39,6 +39,9 @@ struct req_get
 	: public ioremap::thevoid::simple_request_stream<proxy>
 	, public std::enable_shared_from_this<req_get>
 {
+	req_get();
+	~req_get();
+
 	void on_request(const ioremap::thevoid::http_request &req, const boost::asio::const_buffer &buffer);
 	void on_lookup(const ioremap::elliptics::sync_lookup_result &slr, const ioremap::elliptics::error_info &error);
 private:

@@ -26,6 +26,8 @@
 
 #include <swarm/url.hpp>
 
+#include <handystats/measuring_point.hpp>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -41,6 +43,14 @@
 #include <string>
 
 namespace elliptics {
+
+upload_t::upload_t() {
+	HANDY_COUNTER_INCREMENT("mds.handlers.upload");
+}
+
+upload_t::~upload_t() {
+	HANDY_COUNTER_DECREMENT("mds.handlers.upload");
+}
 
 void
 upload_t::on_headers(ioremap::thevoid::http_request &&http_request) {
@@ -240,6 +250,12 @@ upload_helper_t::upload_helper_t(ioremap::swarm::logger bh_logger_
 
 		MDS_LOG_INFO("%s", msg.c_str());
 	}
+
+	HANDY_COUNTER_INCREMENT("mds.handlers.upload_helper");
+}
+
+upload_helper_t::~upload_helper_t() {
+	HANDY_COUNTER_DECREMENT("mds.handlers.upload_helper");
 }
 
 void
