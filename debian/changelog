@@ -1,3 +1,9 @@
+mediastorage-proxy (0.85.11~test-MDS-670) lucid; urgency=low
+
+  * MDS-670: couple retry.
+
+ -- Danil Osherov <shindo@yandex-team.ru>  Tue, 14 Apr 2015 18:00:00 +0400
+
 mediastorage-proxy (0.85.11) lucid; urgency=low
 
   * MDS-888: The marker will be logged if headers are sent and request is
